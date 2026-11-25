@@ -92,8 +92,17 @@ document.addEventListener("DOMContentLoaded", () => {
       // keep it in the creator's list, just mark it published
       uploads = uploads.map((u) => (u.id === id ? { ...u, status: "Published" } : u));
       extra = extra.map((v) => (v.id === id ? { ...v, status: "Published" } : v));
+      const published = extra.find((v) => v.id === id);
       const inCat = CATALOGUE.find((v) => v.id === id);
       if (inCat) inCat.status = "Published";
+      else if (published) CATALOGUE.push({ ...published });   // live on the site immediately
+      // publishing again must clear an earlier "removed" override
+      const ov = Store.get("sv_video_overrides", {});
+      if (ov[id]) {
+        delete ov[id].removed;
+        if (!Object.keys(ov[id]).length) delete ov[id];
+        Store.set("sv_video_overrides", ov);
+      }
       showToast("Upload approved and published ✓");
     } else {
       // rejected: drop it everywhere so it can't be played
@@ -103,6 +112,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (i > -1) CATALOGUE.splice(i, 1);
       Parental.setProtected(id, false);
       MediaStore.remove(id);
+      const ov = Store.get("sv_video_overrides", {});
+      if (ov[id]) { delete ov[id]; Store.set("sv_video_overrides", ov); }
       showToast("Upload rejected and removed");
     }
     Store.set("sv_uploads", uploads);
@@ -205,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------- Users & subscriptions ---------- */
   function allUserRows() {
-    const rows = USERS.map((u) => ({ name: u.name, email: u.email, joined: u.joined }));
+    const rows = USERS.map((u) => ({ name: u.name, email: u.email, joined: u.joined, plan: u.plan }));
     Auth.users().forEach((a) => {
       if (!rows.some((r) => r.email === a.email)) {
         rows.push({ name: a.name, email: a.email, joined: "(registered on this site)" });
@@ -217,7 +228,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderUsers() {
     const planNames = Store.get("sv_plans", DEFAULT_PLANS).map((p) => p.name);
     $("userTable").querySelector("tbody").innerHTML = allUserRows().map((u) => {
-      const sub = Subs.forUser(u.email);
+      // demo rows keep their own plan until an admin changes it
+      const rec = Subs.all()[u.email];
+      const sub = rec ? { ...Subs.DEFAULT, ...rec } : { ...Subs.DEFAULT, plan: u.plan || Subs.DEFAULT.plan };
       const active = sub.status === "active";
       const isAdminUser = Auth.users().some((a) => a.email === u.email && a.role === "admin");
       return `

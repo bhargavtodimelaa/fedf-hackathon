@@ -94,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
     modal.querySelector("#pinCancel").addEventListener("click", () => modal.remove());
     modal.querySelector("#pinSave").addEventListener("click", () => {
       const val = modal.querySelector("#newPin").value.trim();
-      if (val.length < 4) { showToast("PIN must be at least 4 digits"); return; }
+      if (!/^\d{4,6}$/.test(val)) { showToast("PIN must be 4–6 digits"); return; }
       Parental.setPin(val);
       modal.remove();
       renderParental();

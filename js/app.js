@@ -96,40 +96,45 @@ document.addEventListener("DOMContentLoaded", () => {
     const watchlist = Watchlist.all();
     const seenOrSaved = new Set([...history, ...watchlist]);
 
-    // Genre affinity from watch history
+    // Genre affinity — a watched title counts double, a saved one once
     const affinity = {};
-    history.forEach((id) => {
+    const bump = (ids, weight) => ids.forEach((id) => {
       const v = CATALOGUE.find((x) => x.id === id);
-      if (v) affinity[v.genre] = (affinity[v.genre] || 0) + 2;
+      if (v) affinity[v.genre] = (affinity[v.genre] || 0) + weight;
     });
-    // Watchlist genres count a little too
-    watchlist.forEach((id) => {
-      const v = CATALOGUE.find((x) => x.id === id);
-      if (v) affinity[v.genre] = (affinity[v.genre] || 0) + 1;
-    });
+    bump(history, 2);
+    bump(watchlist, 1);
 
+    // Never recommend something already watched or saved
+    const fresh = CATALOGUE.filter((v) => !seenOrSaved.has(v.id));
     let picks;
-    if (Object.keys(affinity).length === 0) {
-      picks = CATALOGUE.filter((v) => v.trending);
+
+    if (!Object.keys(affinity).length) {
+      const trending = fresh.filter((v) => v.trending);
+      picks = (trending.length ? trending : fresh).slice(0, 6);
       $("recoNote").textContent = "Popular picks to get you started — watch something and these will personalise.";
     } else {
-      picks = CATALOGUE
-        .filter((v) => !seenOrSaved.has(v.id))
+      picks = fresh
         .map((v) => ({ v, score: (affinity[v.genre] || 0) + (v.trending ? 0.5 : 0) }))
         .sort((a, b) => b.score - a.score)
-        .map((x) => x.v);
+        .map((x) => x.v)
+        .slice(0, 6);
       const topGenre = Object.entries(affinity).sort((a, b) => b[1] - a[1])[0][0];
-      $("recoNote").textContent = `Because you watched ${topGenre} titles.`;
+      $("recoNote").textContent = history.length
+        ? `Because you watched ${topGenre} titles.`
+        : `Because you saved ${topGenre} titles to your list.`;
       if (!picks.length) {
-        picks = CATALOGUE.filter((v) => v.trending);
+        picks = CATALOGUE.filter((v) => v.trending).slice(0, 6);
         $("recoNote").textContent = "You've seen everything we have — here's what's trending.";
       }
     }
-    renderRow($("recoRow"), picks.slice(0, 6));
+    $("recoSection").hidden = !picks.length;
+    renderRow($("recoRow"), picks, "");
   }
   recommendations();
-  // Refresh recommendations when returning from a watch page
+  // Refresh when returning from a watch page, or when the list changes
   window.addEventListener("pageshow", recommendations);
+  window.addEventListener("svwatchlistchange", recommendations);
 
   /* ---------- Subscription plans ---------- */
   function renderPlans() {

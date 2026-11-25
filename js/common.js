@@ -348,7 +348,8 @@ function videoCard(video) {
 function renderRow(container, videos, emptyMsg) {
   if (!container) return;
   if (!videos.length) {
-    container.innerHTML = `<p class="empty">${emptyMsg || "Nothing here yet."}</p>`;
+    // callers with their own empty state pass "" to suppress the message
+    container.innerHTML = emptyMsg === "" ? "" : `<p class="empty">${emptyMsg || "Nothing here yet."}</p>`;
     return;
   }
   container.innerHTML = videos.map(videoCard).join("");

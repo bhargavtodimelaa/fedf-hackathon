@@ -182,9 +182,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", () => { $("qualityMenu").hidden = true; });
 
   /* ---------- Parental gate ---------- */
-  const locked = Parental.isLocked(video);
-  if (locked) {
-    $("lockScreen").hidden = false;
+  const lockScreen = $("lockScreen");
+  const isLockedNow = () => Parental.isLocked(video);   // unlock state is live
+
+  function unlockPrompt() {
+    askPin((ok) => {
+      if (!ok) return;
+      Parental.unlock(video);
+      lockScreen.hidden = true;
+      showToast("Unlocked for this page view");
+      startPlayback();
+    });
+  }
+
+  if (isLockedNow()) {
+    lockScreen.hidden = false;
     $("lockRating").textContent = video.rating;
     if (Parental.isPinDefault()) {
       const hint = $("pinHint");
@@ -194,16 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Keep the video element in the layout so the overlay keeps the 16:9 area
     // (hiding it collapses .player-box and the notice has no room to show).
     player.pause();
-    $("unlockBtn").addEventListener("click", () => {
-      askPin((ok, pin) => {
-        if (ok) {
-          Parental.unlock(video);
-          $("lockScreen").hidden = true;
-          showToast("Unlocked for this page view");
-          startPlayback();
-        }
-      });
-    });
+    $("unlockBtn").addEventListener("click", unlockPrompt);
   }
 
   /* ---------- Resume + progress saving ---------- */
@@ -221,14 +224,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function startPlayback() {
-    if (locked && Parental.isLocked(video)) return;
+    if (isLockedNow()) return;
     if (saved > 5 && player.duration) player.currentTime = saved;
     player.play().catch(() => {});
   }
 
   $("playBig").addEventListener("click", () => {
-    if (locked && Parental.isLocked(video)) {
-      $("unlockBtn").click();
+    if (isLockedNow()) {
+      lockScreen.hidden = false;
+      player.pause();
+      unlockPrompt();
     } else {
       startPlayback();
     }
