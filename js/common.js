@@ -231,8 +231,14 @@ const Auth = {
   signup(name, email, password, role) {
     email = (email || "").trim().toLowerCase();
     if (!email || !password) return { ok: false, msg: "Email and password are required." };
-    if (this.users().some((u) => u.email === email))
-      return { ok: false, msg: "That email is already registered — try Log in." };
+    const existing = this.users().find((u) => u.email === email);
+    if (existing)
+      return {
+        ok: false,
+        msg: existing.provider === "google"
+          ? "That email is registered with Google — use Continue with Google."
+          : "That email is already registered — try Log in."
+      };
     const user = {
       name: (name || "").trim() || email.split("@")[0],
       email,
@@ -253,7 +259,17 @@ const Auth = {
 
   login(email, password) {
     const user = this.verify(email, password);
-    if (!user) return { ok: false, msg: "Wrong email or password." };
+    if (!user) {
+      const googleUser = this.users().find(
+        (u) => u.email === (email || "").trim().toLowerCase() && u.provider === "google"
+      );
+      return {
+        ok: false,
+        msg: googleUser
+          ? "This account uses Google sign-in — use Continue with Google."
+          : "Wrong email or password."
+      };
+    }
     this.setSession(user);
     return { ok: true, user };
   },
@@ -262,7 +278,49 @@ const Auth = {
     Store.set("sv_user", { name: user.name, email: user.email, role: user.role });
   },
   current() { return Store.get("sv_user", null); },
-  logout() { localStorage.removeItem("sv_user"); }
+  logout() { localStorage.removeItem("sv_user"); },
+
+  /* Google sign up / log in (Google Identity Services).
+     - New Google accounts are always created as viewers.
+     - An existing viewer/creator with the same email keeps its role and data.
+     - Admin accounts must use the password-based admin sign-in. */
+  googleLogin(profile) {
+    if (!profile || !profile.email)
+      return { ok: false, msg: "Google did not return an email address." };
+    if (profile.email_verified === false)
+      return { ok: false, msg: "Your Google email address is not verified." };
+
+    const email = profile.email.trim().toLowerCase();
+    const users = this.users();
+    const existing = users.find((u) => u.email === email);
+
+    if (existing) {
+      if (existing.role === "admin")
+        return { ok: false, msg: "Administrator accounts must sign in with their password." };
+      // Remember the Google identity so the same account is reused later
+      if (profile.sub && existing.googleId !== profile.sub) {
+        existing.googleId = profile.sub;
+        if (profile.picture) existing.picture = profile.picture;
+        Store.set("sv_users", users);
+      }
+      this.setSession(existing);
+      return { ok: true, user: existing };
+    }
+
+    const user = {
+      name: (profile.name || "").trim() || email.split("@")[0],
+      email,
+      role: "viewer",
+      provider: "google",
+      googleId: profile.sub || "",
+      picture: profile.picture || ""
+      // no password: Google accounts can only sign in through Google
+    };
+    users.push(user);
+    Store.set("sv_users", users);
+    this.setSession(user);
+    return { ok: true, user };
+  }
 };
 Auth.seed();
 
@@ -395,6 +453,50 @@ function showToast(msg) {
 }
 
 /* ============================================================
+   Google Sign-In helpers (Google Identity Services)
+   The library is loaded once, lazily, on the first auth modal.
+   ============================================================ */
+const GOOGLE_CLIENT_ID =
+  "447346205973-stp2ouifouf51lpib5n9fdt4qnfh9frf.apps.googleusercontent.com";
+const GIS_SRC = "https://accounts.google.com/gsi/client";
+
+let gisPromise = null;
+let googleCredentialHandler = null;   // set by the open auth modal
+
+function loadGoogleScript() {
+  if (window.google && window.google.accounts && window.google.accounts.id)
+    return Promise.resolve(true);
+  if (gisPromise) return gisPromise;
+  gisPromise = new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = GIS_SRC;
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve(!!(window.google && window.google.accounts.id));
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+  return gisPromise;
+}
+
+/* Read the payload of the ID token Google hands back (JWT, UTF-8 safe) */
+function decodeJwt(token) {
+  try {
+    const part = String(token).split(".")[1];
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const json = decodeURIComponent(
+      atob(padded).split("").map((c) =>
+        "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join("")
+    );
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+}
+
+/* ============================================================
    Auth gate modal - log in / sign up (force = cannot dismiss)
    ============================================================ */
 function openAuthGate(opts = {}) {
@@ -411,6 +513,12 @@ function openAuthGate(opts = {}) {
     <div class="modal">
       <h2>👋 Welcome to StreamVibe</h2>
       <p class="muted">${force ? "Log in or sign up to continue." : "Log in or sign up to continue."}</p>
+
+      <div class="google-signin">
+        <div id="googleBtn"></div>
+      </div>
+      <p class="google-note" id="googleNote" hidden></p>
+      <div class="auth-divider"><span>or use email</span></div>
 
       <div class="auth-tabs">
         <button class="auth-tab ${tab === "login" ? "active" : ""}" data-tab="login">Log in</button>
@@ -454,7 +562,8 @@ function openAuthGate(opts = {}) {
       </form>
 
       <div class="hint-box">
-        💡 Demo accounts (stored in localStorage)<br>
+        💡 New Google accounts start as viewers. Admins keep the password sign-in.<br>
+        Demo accounts (stored in localStorage)<br>
         Viewer: <strong>demo@streamvibe.com / demo123</strong><br>
         Creator: <strong>creator@streamvibe.com / demo123</strong><br>
         Admin: <strong>admin@streamvibe.com / admin123</strong>
@@ -474,10 +583,14 @@ function openAuthGate(opts = {}) {
 
   /* backdrop close only when not forced */
   modal.addEventListener("click", (e) => {
-    if (e.target === modal && !force) modal.remove();
+    if (e.target === modal && !force) {
+      googleCredentialHandler = null;
+      modal.remove();
+    }
   });
 
   const done = (user) => {
+    googleCredentialHandler = null;
     modal.remove();
     initNav();
     window.dispatchEvent(new CustomEvent("svauthchange", { detail: user }));
@@ -509,6 +622,49 @@ function openAuthGate(opts = {}) {
     const err = modal.querySelector("#authSignupErr");
     if (!res.ok) { err.textContent = res.msg; err.hidden = false; return; }
     done(res.user);
+  });
+
+  /* ---------- Continue with Google (sign up + log in in one) ---------- */
+  const googleSlot = modal.querySelector("#googleBtn");
+  const googleNote = modal.querySelector("#googleNote");
+  const googleError = (msg) => { googleNote.textContent = msg; googleNote.hidden = false; };
+
+  googleCredentialHandler = (res) => {
+    const payload = decodeJwt(res && res.credential);
+    if (!payload || !payload.email) {
+      googleError("Google sign-in failed — no account details were received.");
+      return;
+    }
+    const out = Auth.googleLogin(payload);
+    if (!out.ok) { googleError(out.msg); return; }
+    done(out.user);
+  };
+
+  loadGoogleScript().then((ready) => {
+    if (!ready) {
+      googleError("Google sign-in could not be loaded. Check your connection and try again.");
+      return;
+    }
+    if (!googleSlot.isConnected) return;   // modal was already closed
+    try {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (res) => { if (googleCredentialHandler) googleCredentialHandler(res); },
+        ux_mode: "popup",
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+      google.accounts.id.renderButton(googleSlot, {
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width: 340
+      });
+    } catch (e) {
+      googleError("Google sign-in is not available for this address.");
+    }
   });
 
   setTimeout(() => {

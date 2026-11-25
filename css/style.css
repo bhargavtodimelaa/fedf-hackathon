@@ -51,6 +51,37 @@ img { display: block; max-width: 100%; }
 .hint-box strong { color: #fff; letter-spacing: 2px; }
 
 /* Auth gate (login / signup) */
+.google-signin {
+  margin-top: .9rem;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+}
+.google-signin > div { display: flex; justify-content: center; width: 100%; }
+.google-note {
+  color: var(--accent-2);
+  font-size: .82rem;
+  line-height: 1.5;
+  text-align: center;
+  margin-top: .45rem;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  margin: .85rem 0 0;
+  color: var(--muted);
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, .12);
+}
 .auth-tabs {
   display: flex;
   gap: .4rem;

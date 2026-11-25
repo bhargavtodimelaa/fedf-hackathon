@@ -62,5 +62,6 @@ js/admin.js     → admin dashboard
 * 📶 **Adaptive streaming** — HLS titles use hls.js multi-bitrate ABR with an Auto/quality picker; MP4 titles play progressively
 * 🔒 **Parental controls** — PG-13/R locked by default behind a PIN (**1234**); per-rating restrictions can be set/removed on the My List page; PIN unlock lasts only for that page view
 * 🔑 **Login / signup** — shown on every page open, users and session persisted in `localStorage` (`sv_users`, `sv_user`), admin panel verifies the admin role against those stored accounts
+* 🔵 **Google sign-in** — “Continue with Google” on the auth gate (Google Identity Services, client ID in `js/common.js`). Google sign-ups are always **viewers**; an existing viewer/creator keeps its role, and admin accounts must still use the password sign-in
 
 🎥 Demo videos come from verified public URLs — `media.w3.org`, MDN CC0 clips, `test-videos.co.uk`, `samplelib.com`, `filesamples.com` MP4s plus Apple/Mux multi-bitrate HLS streams (all checked reachable), so an internet connection is needed for playback.
