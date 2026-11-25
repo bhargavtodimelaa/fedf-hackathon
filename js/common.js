@@ -696,8 +696,8 @@ function askPin(callback) {
   modal.className = "modal-backdrop open";
   modal.innerHTML = `
     <div class="modal modal-sm">
-      <h2>🔒 Parental control</h2>
-      <p class="muted">Enter the PIN to play this title.</p>
+      <h2>🔒 Parental lock</h2>
+      <p class="muted">This title is parent-lock protected. Enter the PIN to continue.</p>
       ${Parental.isPinDefault() ? `<p class="hint-box">💡 Demo PIN: <strong>${Parental.DEMO_PIN}</strong></p>` : ""}
       <input type="password" id="pinInput" inputmode="numeric" maxlength="6" placeholder="PIN">
       <p class="error" id="pinError" hidden>Incorrect PIN.</p>

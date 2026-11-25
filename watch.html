@@ -31,10 +31,12 @@
         <div class="lock-screen" id="lockScreen" hidden>
           <div class="lock-card">
             <div class="lock-icon">🔒</div>
-            <h2>Age-restricted content</h2>
-            <p>This title is rated <strong id="lockRating"></strong>. Enter the parental PIN to continue.</p>
+            <span class="lock-badge">Parental lock</span>
+            <h2>This title is protected</h2>
+            <p class="lock-text">This video is parent-lock protected. Please enter the PIN to continue.</p>
+            <p class="lock-rating">Rated <strong id="lockRating">—</strong></p>
             <p class="hint-box" id="pinHint" hidden></p>
-            <button class="btn btn-primary" id="unlockBtn">Enter PIN</button>
+            <button class="btn btn-primary lock-btn" id="unlockBtn">Enter PIN</button>
           </div>
         </div>
 

@@ -191,13 +191,14 @@ document.addEventListener("DOMContentLoaded", () => {
       hint.hidden = false;
       hint.innerHTML = `💡 Demo PIN: <strong>${Parental.DEMO_PIN}</strong>`;
     }
-    player.style.display = "none";
+    // Keep the video element in the layout so the overlay keeps the 16:9 area
+    // (hiding it collapses .player-box and the notice has no room to show).
+    player.pause();
     $("unlockBtn").addEventListener("click", () => {
       askPin((ok, pin) => {
         if (ok) {
           Parental.unlock(video);
           $("lockScreen").hidden = true;
-          player.style.display = "";
           showToast("Unlocked for this page view");
           startPlayback();
         }
